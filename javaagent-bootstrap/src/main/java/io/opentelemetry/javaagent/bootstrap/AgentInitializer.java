@@ -44,11 +44,6 @@ public final class AgentInitializer {
     }
   }
 
-  // TODO misleading name
-  public static synchronized ClassLoader getAgentClassLoader() {
-    return agentClassLoader;
-  }
-
   /**
    * Create the agent classloader. This must be called after the bootstrap jar has been appended to
    * the bootstrap classpath.
@@ -67,15 +62,7 @@ public final class AgentInitializer {
       agentParent = getPlatformClassLoader();
     }
 
-    ClassLoader agentClassLoader =
-        new AgentClassLoader(javaagentFile, innerJarFilename, agentParent);
-
-    Class<?> extensionClassLoaderClass =
-        agentClassLoader.loadClass("io.opentelemetry.javaagent.tooling.ExtensionClassLoader");
-    return (ClassLoader)
-        extensionClassLoaderClass
-            .getDeclaredMethod("getInstance", ClassLoader.class, File.class)
-            .invoke(null, agentClassLoader, javaagentFile);
+    return new AgentClassLoader(javaagentFile, innerJarFilename, agentParent);
   }
 
   private static ClassLoader getPlatformClassLoader()

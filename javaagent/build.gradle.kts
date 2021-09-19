@@ -34,7 +34,10 @@ listOf(javaagentLibs).forEach {
 }
 
 dependencies {
+  bootstrapLibs(project(":javaagent-bootstrap"))
   bootstrapLibs("io.opentelemetry:opentelemetry-api:1.6.0")
+  bootstrapLibs("io.opentelemetry:opentelemetry-api-metrics:1.6.0-alpha")
+  bootstrapLibs("io.opentelemetry:opentelemetry-semconv:1.6.0-alpha")
 
   baseJavaagentLibs(project(":javaagent-tooling"))
   baseJavaagentLibs("io.opentelemetry:opentelemetry-sdk:1.6.0")
