@@ -1,17 +1,9 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import com.github.jk1.license.filter.LicenseBundleNormalizer
-import com.github.jk1.license.render.InventoryMarkdownReportRenderer
 
 plugins {
-  id("com.github.jk1.dependency-license-report")
-
-  id("otel.java-conventions")
-  id("otel.publish-conventions")
+  `java-library`
   id("io.opentelemetry.instrumentation.javaagent-shadowing")
 }
-
-description = "OpenTelemetry Javaagent"
-group = "io.opentelemetry.javaagent"
 
 // this configuration collects libs that will be placed in the bootstrap classloader
 val bootstrapLibs by configurations.creating {
@@ -30,14 +22,9 @@ val javaagentLibs by configurations.creating {
   isCanBeConsumed = false
   extendsFrom(baseJavaagentLibs)
 }
-// this configuration collects just exporter libs (also placed in the agent classloader & isolated from the instrumented application)
-val exporterLibs by configurations.creating {
-  isCanBeResolved = true
-  isCanBeConsumed = false
-}
 
 // exclude dependencies that are to be placed in bootstrap from agent libs - they won't be added to inst/
-listOf(javaagentLibs, exporterLibs).forEach {
+listOf(javaagentLibs).forEach {
   it.run {
     exclude("org.slf4j")
     exclude("io.opentelemetry", "opentelemetry-api")
@@ -46,76 +33,16 @@ listOf(javaagentLibs, exporterLibs).forEach {
   }
 }
 
-val licenseReportDependencies by configurations.creating {
-  extendsFrom(bootstrapLibs)
-}
-
 dependencies {
-  bootstrapLibs(project(":instrumentation-api"))
-  bootstrapLibs(project(":instrumentation-api-annotation-support"))
-  bootstrapLibs(project(":javaagent-bootstrap"))
-  bootstrapLibs(project(":javaagent-instrumentation-api"))
-  bootstrapLibs("org.slf4j:slf4j-simple")
+  bootstrapLibs("io.opentelemetry:opentelemetry-api:1.6.0")
 
-  baseJavaagentLibs(project(":javaagent-extension-api"))
   baseJavaagentLibs(project(":javaagent-tooling"))
-  baseJavaagentLibs(project(":muzzle"))
-  baseJavaagentLibs(project(":instrumentation:opentelemetry-annotations-1.0:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:opentelemetry-api:opentelemetry-api-1.0:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:opentelemetry-api:opentelemetry-api-1.4:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:executors:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:internal:internal-class-loader:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:internal:internal-eclipse-osgi-3.6:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:internal:internal-proxy:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:internal:internal-reflection:javaagent"))
-  baseJavaagentLibs(project(":instrumentation:internal:internal-url-class-loader:javaagent"))
-
-  exporterLibs(project(":javaagent-exporters"))
-
-  // We only have compileOnly dependencies on these to make sure they don't leak into POMs.
-  licenseReportDependencies("com.github.ben-manes.caffeine:caffeine") {
-    isTransitive = false
-  }
-  licenseReportDependencies("com.blogspot.mydailyjava:weak-lock-free")
-  // TODO ideally this would be :instrumentation instead of :javaagent-tooling
-  //  in case there are dependencies (accidentally) pulled in by instrumentation modules
-  //  but I couldn't get that to work
-  licenseReportDependencies(project(":javaagent-tooling"))
-  licenseReportDependencies(project(":javaagent-extension-api"))
-
-  testCompileOnly(project(":javaagent-bootstrap"))
-  testCompileOnly(project(":javaagent-instrumentation-api"))
-
-  testImplementation("com.google.guava:guava")
-  testImplementation("io.opentracing.contrib.dropwizard:dropwizard-opentracing:0.2.2")
+  baseJavaagentLibs("io.opentelemetry:opentelemetry-sdk:1.6.0")
 }
 
 val javaagentDependencies = dependencies
 
-// collect all bootstrap and javaagent instrumentation dependencies
-project(":instrumentation").subprojects {
-  val subProj = this
-
-  plugins.withId("otel.javaagent-bootstrap") {
-    javaagentDependencies.run {
-      add(bootstrapLibs.name, project(subProj.path))
-    }
-  }
-
-  plugins.withId("otel.javaagent-instrumentation") {
-    javaagentDependencies.run {
-      add(javaagentLibs.name, project(subProj.path))
-    }
-  }
-}
-
 tasks {
-  processResources {
-    from(rootProject.file("licenses")) {
-      into("META-INF/licenses")
-    }
-  }
-
   val relocateBaseJavaagentLibs by registering(ShadowJar::class) {
     configurations = listOf(baseJavaagentLibs)
 
@@ -134,12 +61,6 @@ tasks {
     archiveFileName.set("javaagentLibs-relocated.jar")
 
     excludeBootstrapJars()
-  }
-
-  val relocateExporterLibs by registering(ShadowJar::class) {
-    configurations = listOf(exporterLibs)
-
-    archiveFileName.set("exporterLibs-relocated.jar")
   }
 
   // Includes instrumentations, but not exporters
@@ -163,23 +84,6 @@ tasks {
     }
   }
 
-  // Includes everything needed for OOTB experience
-  val fullJavaagentJar by registering(ShadowJar::class) {
-    configurations = listOf(bootstrapLibs)
-
-    dependsOn(relocateJavaagentLibs, relocateExporterLibs)
-    isolateClasses(relocateJavaagentLibs.get().outputs.files)
-    isolateClasses(relocateExporterLibs.get().outputs.files)
-
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    archiveClassifier.set("all")
-
-    manifest {
-      attributes(shadowJar.get().manifest.attributes)
-    }
-  }
-
   // Includes only the agent machinery and required instrumentations
   val baseJavaagentJar by registering(ShadowJar::class) {
     configurations = listOf(bootstrapLibs)
@@ -196,65 +100,9 @@ tasks {
     }
   }
 
-  val baseJar by configurations.creating {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-  }
-
-  artifacts {
-    add("baseJar", baseJavaagentJar)
-  }
-
   assemble {
-    dependsOn(shadowJar, fullJavaagentJar, baseJavaagentJar)
+    dependsOn(shadowJar, baseJavaagentJar)
   }
-
-  withType<Test>().configureEach {
-    dependsOn(fullJavaagentJar)
-    inputs.file(fullJavaagentJar.get().archiveFile)
-
-    jvmArgs("-Dotel.javaagent.debug=true")
-
-    doFirst {
-      // Defining here to allow jacoco to be first on the command line.
-      jvmArgs("-javaagent:${fullJavaagentJar.get().archiveFile.get().asFile}")
-    }
-
-    testLogging {
-      events("started")
-    }
-  }
-
-  val cleanLicenses by registering(Delete::class) {
-    delete(rootProject.file("licenses"))
-  }
-
-  named("generateLicenseReport").configure {
-    dependsOn(cleanLicenses)
-  }
-
-  publishing {
-    publications {
-      named<MavenPublication>("maven") {
-        artifact(fullJavaagentJar)
-      }
-    }
-  }
-}
-
-licenseReport {
-  outputDir = rootProject.file("licenses").absolutePath
-
-  renderers = arrayOf(InventoryMarkdownReportRenderer())
-
-  configurations = arrayOf(licenseReportDependencies.name)
-
-  excludeGroups = arrayOf(
-    "io.opentelemetry.instrumentation",
-    "io.opentelemetry.javaagent"
-  )
-
-  filters = arrayOf(LicenseBundleNormalizer("$projectDir/license-normalizer-bundle.json", true))
 }
 
 fun CopySpec.isolateClasses(jars: Iterable<File>) {
@@ -263,8 +111,6 @@ fun CopySpec.isolateClasses(jars: Iterable<File>) {
       // important to keep prefix "inst" short, as it is prefixed to lots of strings in runtime mem
       into("inst")
       rename("(^.*)\\.class\$", "\$1.classdata")
-      // Rename LICENSE file since it clashes with license dir on non-case sensitive FSs (i.e. Mac)
-      rename("""^LICENSE$""", "LICENSE.renamed")
     }
   }
 }
@@ -272,9 +118,7 @@ fun CopySpec.isolateClasses(jars: Iterable<File>) {
 // exclude bootstrap projects from javaagent libs - they won't be added to inst/
 fun ShadowJar.excludeBootstrapJars() {
   dependencies {
-    exclude(project(":instrumentation-api"))
-    exclude(project(":instrumentation-api-annotation-support"))
     exclude(project(":javaagent-bootstrap"))
-    exclude(project(":javaagent-instrumentation-api"))
+    exclude("io.opentelemetry:opentelemetry-api")
   }
 }
