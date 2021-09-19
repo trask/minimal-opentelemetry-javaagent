@@ -27,20 +27,34 @@ public final class AgentInitializer {
 
   // called via reflection in the OpenTelemetryAgent class
   public static void initialize(Instrumentation inst, File javaagentFile) throws Exception {
-    if (agentClassLoader == null) {
-      agentClassLoader = createAgentClassLoader("inst", javaagentFile);
+    agentClassLoader = createAgentClassLoader("inst", javaagentFile);
 
-      Class<?> agentInstallerClass =
-          agentClassLoader.loadClass("io.opentelemetry.javaagent.tooling.AgentInstaller");
-      Method agentInstallerMethod =
-          agentInstallerClass.getMethod("installBytebuddyAgent", Instrumentation.class);
-      ClassLoader savedContextClassLoader = Thread.currentThread().getContextClassLoader();
-      try {
-        Thread.currentThread().setContextClassLoader(agentClassLoader);
-        agentInstallerMethod.invoke(null, inst);
-      } finally {
-        Thread.currentThread().setContextClassLoader(savedContextClassLoader);
-      }
+    Class<?> agentInstallerClass =
+        agentClassLoader.loadClass("io.opentelemetry.javaagent.tooling.AgentInstaller");
+    Method agentInstallerMethod =
+        agentInstallerClass.getMethod("installBytebuddyAgent", Instrumentation.class);
+    ClassLoader savedContextClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+      Thread.currentThread().setContextClassLoader(agentClassLoader);
+      agentInstallerMethod.invoke(null, inst);
+    } finally {
+      Thread.currentThread().setContextClassLoader(savedContextClassLoader);
+    }
+  }
+
+  public static void nativeImageRuntimeInit() throws Exception {
+    System.out.println("nativeImageRuntimeInit!!!");
+    System.out.println("agentClassLoader: " + agentClassLoader);
+
+    Class<?> agentInstallerClass =
+        Class.forName("io.opentelemetry.javaagent.tooling.AgentInstaller", false, agentClassLoader);
+    Method agentInstallerMethod = agentInstallerClass.getMethod("nativeImageRuntimeInit");
+    ClassLoader savedContextClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+      Thread.currentThread().setContextClassLoader(agentClassLoader);
+      agentInstallerMethod.invoke(null);
+    } finally {
+      Thread.currentThread().setContextClassLoader(savedContextClassLoader);
     }
   }
 
