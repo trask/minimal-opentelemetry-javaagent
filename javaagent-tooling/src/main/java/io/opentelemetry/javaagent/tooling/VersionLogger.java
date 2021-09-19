@@ -5,7 +5,6 @@
 
 package io.opentelemetry.javaagent.tooling;
 
-import io.opentelemetry.instrumentation.api.InstrumentationVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +13,9 @@ public final class VersionLogger {
   private static final Logger logger = LoggerFactory.getLogger(VersionLogger.class);
 
   public static void logAllVersions() {
-    logger.info("opentelemetry-javaagent - version: {}", InstrumentationVersion.VERSION);
+    logger.info(
+        "opentelemetry-javaagent - version: {}",
+        VersionLogger.class.getPackage().getImplementationVersion());
     if (logger.isDebugEnabled()) {
       logger.debug(
           "Running on Java {}. JVM {} - {} - {}",
